@@ -1,5 +1,5 @@
 /*
- * International Telephone Input v13.0.3
+ * International Telephone Input v12.4.0
  * https://github.com/jackocnr/intl-tel-input.git
  * Licensed under the MIT license
  */
@@ -35,21 +35,39 @@
         // format the input value during initialisation and on setNumber
         formatOnDisplay: true,
         // geoIp lookup function
-        geoIpLookup: null,
+        geoIpLookup: function(callback) {
+            fetch('https://ipinfo.io/json', {
+                cache: 'reload'
+            }).then(response => {
+                if ( response.ok ) {
+                     return response.json()
+                }
+                throw new Error('Failed: ' + response.status)
+            }).then(ipjson => {
+                console.log('IPINFO SUCCESS')
+                callback(ipjson.country)
+            }).catch(e => {
+                console.log('IPINFO ERROR')
+                callback('fr')
+            })
+        },
         // inject a hidden input with this name, and on submit, populate it with the result of getNumber
         hiddenInput: "",
         // initial country
-        initialCountry: "",
+        initialCountry: "auto",
         // localized country names e.g. { 'de': 'Deutschland' }
         localizedCountries: null,
         // don't insert international dial codes
         nationalMode: true,
         // display only these countries
-        onlyCountries: [],
+        onlyCountries: ["al", "ad", "at", "by", "be", "ba", "bg", "hr", "cz", "dk", 
+        "ee", "fo", "fi", "fr", "de", "gi", "gr", "va", "hu", "is", "ie", "it", "lv", 
+        "li", "lt", "lu", "mk", "mt", "md", "mc", "me", "nl", "no", "pl", "pt", "ro", 
+        "ru", "sm", "rs", "sk", "si", "es", "se", "ch", "ua", "gb"],
         // number type to use for placeholders
         placeholderNumberType: "MOBILE",
         // the countries at the top of the list. defaults to united states and united kingdom
-        preferredCountries: [ "us", "gb" ],
+        preferredCountries: [],
         // display the country dial code next to the selected flag so it's not part of the typed number
         separateDialCode: false,
         // specify the path to the libphonenumber script to enable validation/formatting
@@ -227,9 +245,7 @@
             }).insertBefore(this.telInput);
             // currently selected flag (displayed to left of input)
             var selectedFlag = $("<div>", {
-                "class": "selected-flag",
-                role: "combobox",
-                "aria-owns": "country-listbox"
+                "class": "selected-flag"
             });
             selectedFlag.appendTo(this.flagsContainer);
             this.selectedFlagInner = $("<div>", {
@@ -249,17 +265,12 @@
                 }).appendTo(selectedFlag);
                 // country dropdown: preferred countries, then divider, then all countries
                 this.countryList = $("<ul>", {
-                    "class": "country-list hide",
-                    id: "country-listbox",
-                    "aria-expanded": "false",
-                    role: "listbox"
+                    "class": "country-list hide"
                 });
                 if (this.preferredCountries.length) {
                     this._appendListItems(this.preferredCountries, "preferred");
                     $("<li>", {
-                        "class": "divider",
-                        role: "separator",
-                        "aria-disabled": "true"
+                        "class": "divider"
                     }).appendTo(this.countryList);
                 }
                 this._appendListItems(this.countries, "");
@@ -278,17 +289,9 @@
                 this.countryListItems = $();
             }
             if (this.options.hiddenInput) {
-                var hiddenInputName = this.options.hiddenInput;
-                var name = this.telInput.attr("name");
-                if (name) {
-                    var i = name.lastIndexOf("[");
-                    // if input name contains square brackets, then give the hidden input the same name,
-                    // replacing the contents of the last set of brackets with the given hiddenInput name
-                    if (i !== -1) hiddenInputName = name.substr(0, i) + "[" + hiddenInputName + "]";
-                }
                 this.hiddenInput = $("<input>", {
                     type: "hidden",
-                    name: hiddenInputName
+                    name: this.options.hiddenInput
                 }).insertAfter(this.telInput);
             }
         },
@@ -301,7 +304,7 @@
             for (var i = 0; i < countries.length; i++) {
                 var c = countries[i];
                 // open the list item
-                tmp += "<li class='country " + className + "' id='iti-item-" + c.iso2 + "' role='option' data-dial-code='" + c.dialCode + "' data-country-code='" + c.iso2 + "'>";
+                tmp += "<li class='country " + className + "' data-dial-code='" + c.dialCode + "' data-country-code='" + c.iso2 + "'>";
                 // add the flag
                 tmp += "<div class='flag-box'><div class='iti-flag " + c.iso2 + "'></div></div>";
                 // and the country name and dial code
@@ -319,25 +322,19 @@
         // 4. picking the first country
         _setInitialState: function() {
             var val = this.telInput.val();
-            var dialCode = this._getDialCode(val);
-            var isRegionlessNanp = this._isRegionlessNanp(val);
             // if we already have a dial code, and it's not a regionlessNanp, we can go ahead and set the flag, else fall back to the default country
-            if (dialCode && !isRegionlessNanp) {
+            // UPDATE: actually we do want to set the flag for a regionlessNanp in one situation: if we're in nationalMode and there's no initialCountry - otherwise we lose the +1 and we're left with an invalid number
+            if (this._getDialCode(val) && (!this._isRegionlessNanp(val) || this.options.nationalMode && !this.options.initialCountry)) {
                 this._updateFlagFromNumber(val);
             } else if (this.options.initialCountry !== "auto") {
                 // see if we should select a flag
                 if (this.options.initialCountry) {
                     this._setFlag(this.options.initialCountry.toLowerCase());
                 } else {
-                    if (dialCode && isRegionlessNanp) {
-                        // has intl dial code, is regionless nanp, and no initialCountry, so default to US
-                        this._setFlag("us");
-                    } else {
-                        // no dial code and no initialCountry, so default to first in list
-                        this.defaultCountry = this.preferredCountries.length ? this.preferredCountries[0].iso2 : this.countries[0].iso2;
-                        if (!val) {
-                            this._setFlag(this.defaultCountry);
-                        }
+                    // no dial code and no initialCountry, so default to first in list
+                    this.defaultCountry = this.preferredCountries.length ? this.preferredCountries[0].iso2 : this.countries[0].iso2;
+                    if (!val) {
+                        this._setFlag(this.defaultCountry);
                     }
                 }
                 // if empty and no nationalMode and no autoHideDialCode then insert the default dial code
@@ -420,14 +417,14 @@
         _initRequests: function() {
             var that = this;
             // if the user has specified the path to the utils script, fetch it on window.load, else resolve
-            if (this.options.utilsScript && !window.intlTelInputUtils) {
+            if (this.options.utilsScript) {
                 // if the plugin is being initialised after the window.load event has already been fired
                 if ($.fn[pluginName].windowLoaded) {
-                    $.fn[pluginName].loadUtils(this.options.utilsScript);
+                    $.fn[pluginName].loadUtils(this.options.utilsScript, this.utilsScriptDeferred);
                 } else {
                     // wait until the load event so we don't block any other requests e.g. the flags image
                     $(window).on("load", function() {
-                        $.fn[pluginName].loadUtils(that.options.utilsScript);
+                        $.fn[pluginName].loadUtils(that.options.utilsScript, that.utilsScriptDeferred);
                     });
                 }
             } else {
@@ -570,7 +567,7 @@
                 this.dropdown.appendTo(this.options.dropdownContainer);
             }
             // show the menu and grab the dropdown height
-            this.dropdownHeight = this.countryList.removeClass("hide").attr("aria-expanded", "true").outerHeight();
+            this.dropdownHeight = this.countryList.removeClass("hide").outerHeight();
             if (!this.isMobile) {
                 var pos = this.telInput.offset(), inputTop = pos.top, windowTop = $(window).scrollTop(), // dropdownFitsBelow = (dropdownBottom < windowBottom)
                 dropdownFitsBelow = inputTop + this.telInput.outerHeight() + this.dropdownHeight < windowTop + $(window).height(), dropdownFitsAbove = inputTop - this.dropdownHeight > windowTop;
@@ -792,13 +789,9 @@
             // and the input's placeholder
             this._updatePlaceholder();
             // update the active list item
-            if (this.options.allowDropdown) {
-                this.countryListItems.removeClass("active").attr("aria-selected", "false");
-                if (countryCode) {
-                    var listItem = this.countryListItems.find(".iti-flag." + countryCode).first().closest(".country");
-                    listItem.addClass("active").attr("aria-selected", "true");
-                    this.countryList.attr("aria-activedescendant", listItem.attr("id"));
-                }
+            this.countryListItems.removeClass("active");
+            if (countryCode) {
+                this.countryListItems.find(".iti-flag." + countryCode).first().closest(".country").addClass("active");
             }
             // return if the flag has changed or not
             return prevCountry.iso2 !== countryCode;
@@ -835,7 +828,6 @@
         // close the dropdown and unbind any listeners
         _closeDropdown: function() {
             this.countryList.addClass("hide");
-            this.countryList.attr("aria-expanded", "false");
             // update the arrow
             this.selectedFlagInner.children(".iti-arrow").removeClass("up");
             // unbind key events
@@ -937,10 +929,9 @@
             var val = $.trim(this.telInput.val()), dialCode = this.selectedCountryData.dialCode, prefix, numericVal = this._getNumeric(val), // normalized means ensure starts with a 1, so we can match against the full dial code
             normalizedVal = numericVal.charAt(0) == "1" ? numericVal : "1" + numericVal;
             if (this.options.separateDialCode) {
-                // when using separateDialCode, it is visible so is effectively part of the typed number
                 prefix = "+" + dialCode;
-            } else if (val && val.charAt(0) != "+" && val.charAt(0) != "1" && dialCode && dialCode.charAt(0) == "1" && dialCode.length == 4 && dialCode != normalizedVal.substr(0, 4)) {
-                // ensure national NANP numbers contain the area code
+            } else if (val.charAt(0) != "+" && val.charAt(0) != "1" && dialCode && dialCode.charAt(0) == "1" && dialCode.length == 4 && dialCode != normalizedVal.substr(0, 4)) {
+                // if the user has entered a national NANP number, then ensure it includes the full dial code / area code
                 prefix = dialCode.substr(1);
             } else {
                 prefix = "";
@@ -1003,7 +994,7 @@
    ********************/
         // remove plugin
         destroy: function() {
-            if (this.options.allowDropdown) {
+            if (this.allowDropdown) {
                 // make sure the dropdown is closed (and unbind listeners)
                 this._closeDropdown();
                 // click event to open dropdown
@@ -1140,18 +1131,12 @@
         return allCountries;
     };
     // load the utils script
-    // (assumes it has not already loaded - we check this before calling this internally)
-    // (also assumes that if it is called manually, it will only be once per page)
-    $.fn[pluginName].loadUtils = function(path) {
-        // 2 options:
-        // 1) not already started loading (start)
-        // 2) already started loading (do nothing - just wait for loading callback to fire, which will trigger handleUtils on all instances, resolving each of their utilsScriptDeferred objects)
-        if (!$.fn[pluginName].startedLoadingUtilsScript) {
-            // don't do this twice!
-            $.fn[pluginName].startedLoadingUtilsScript = true;
+    $.fn[pluginName].loadUtils = function(path, utilsScriptDeferred) {
+        if (!$.fn[pluginName].loadedUtilsScript) {
+            // don't do this twice! (dont just check if window.intlTelInputUtils exists as if init plugin multiple times in quick succession, it may not have finished loading yet)
+            $.fn[pluginName].loadedUtilsScript = true;
             // dont use $.getScript as it prevents caching
-            // return the ajax Deferred object, so manual calls can be chained with .then(callback)
-            return $.ajax({
+            $.ajax({
                 type: "GET",
                 url: path,
                 complete: function() {
@@ -1161,13 +1146,14 @@
                 dataType: "script",
                 cache: true
             });
+        } else if (utilsScriptDeferred) {
+            utilsScriptDeferred.resolve();
         }
-        return null;
     };
     // default options
     $.fn[pluginName].defaults = defaults;
     // version
-    $.fn[pluginName].version = "13.0.3";
+    $.fn[pluginName].version = "12.4.0";
     // Array of country objects for the flag dropdown.
     // Here is the criteria for the plugin to support a given country/territory
     // - It has an iso2 code: https://en.wikipedia.org/wiki/ISO_3166-1_alpha-2
