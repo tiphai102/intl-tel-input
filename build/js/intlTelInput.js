@@ -34,23 +34,6 @@
         excludeCountries: [],
         // format the input value during initialisation and on setNumber
         formatOnDisplay: true,
-        // geoIp lookup function
-        geoIpLookup: function(callback) {
-            fetch('https://ipinfo.io/json', {
-                cache: 'reload'
-            }).then(response => {
-                if ( response.ok ) {
-                     return response.json()
-                }
-                throw new Error('Failed: ' + response.status)
-            }).then(ipjson => {
-                console.log('IPINFO SUCCESS')
-                callback(ipjson.country)
-            }).catch(e => {
-                console.log('IPINFO ERROR')
-                callback('fr')
-            })
-        },
         // inject a hidden input with this name, and on submit, populate it with the result of getNumber
         hiddenInput: "",
         // initial country
@@ -67,7 +50,7 @@
         // number type to use for placeholders
         placeholderNumberType: "MOBILE",
         // the countries at the top of the list. defaults to united states and united kingdom
-        preferredCountries: [],
+        preferredCountries: ['fr'],
         // display the country dial code next to the selected flag so it's not part of the typed number
         separateDialCode: false,
         // specify the path to the libphonenumber script to enable validation/formatting
@@ -448,17 +431,14 @@
             } else if (!$.fn[pluginName].startedLoadingAutoCountry) {
                 // don't do this twice!
                 $.fn[pluginName].startedLoadingAutoCountry = true;
-                if (typeof this.options.geoIpLookup === "function") {
-                    this.options.geoIpLookup(function(countryCode) {
-                        $.fn[pluginName].autoCountry = countryCode.toLowerCase();
-                        // tell all instances the auto country is ready
-                        // TODO: this should just be the current instances
-                        // UPDATE: use setTimeout in case their geoIpLookup function calls this callback straight away (e.g. if they have already done the geo ip lookup somewhere else). Using setTimeout means that the current thread of execution will finish before executing this, which allows the plugin to finish initialising.
-                        setTimeout(function() {
-                            $(".intl-tel-input input").intlTelInput("handleAutoCountry");
-                        });
-                    });
-                }
+                var pathArray = window.location.hash.split('/');
+                $.fn[pluginName].autoCountry = pathArray[2].toLowerCase();
+                // tell all instances the auto country is ready
+                // TODO: this should just be the current instances
+                // UPDATE: use setTimeout in case their geoIpLookup function calls this callback straight away (e.g. if they have already done the geo ip lookup somewhere else). Using setTimeout means that the current thread of execution will finish before executing this, which allows the plugin to finish initialising.
+                setTimeout(function() {
+                    $(".intl-tel-input input").intlTelInput("handleAutoCountry");
+                });
             }
         },
         // initialize any key listeners
